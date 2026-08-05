@@ -1,4 +1,5 @@
 import {
+  ConfigUpdate,
   EvalLog,
   EvalPlan,
   EvalSample,
@@ -51,6 +52,8 @@ export class SampleNotFoundError extends Error {
 export interface LogZipAccess {
   entryNames: ReadonlySet<string>;
   readFile: (name: string) => Promise<Uint8Array>;
+  /** Uncompressed size of an entry (central directory; no fetch). */
+  uncompressedSize: (name: string) => number | undefined;
 }
 
 export interface RemoteLogFile {
@@ -92,6 +95,62 @@ export const headerFromLogStart = (start: LogStart): EvalHeader => ({
   tags: start.eval?.tags ?? [],
   metadata: start.eval?.metadata ?? {},
 });
+
+const JOURNAL_SUMMARIES_DIR = "_journal/summaries/";
+
+// parseInt stops at the ".json" suffix
+const journalFileIndex = (filename: string): number =>
+  parseInt(filename.slice(JOURNAL_SUMMARIES_DIR.length), 10);
+
+/**
+ * Keep the last row per (id, epoch), matching the Python readers'
+ * last-entry-wins rule: a requeued sample's re-run is recorded after its
+ * superseded prior attempt.
+ *
+ * Exported for unit testing.
+ */
+export const dedupeSummaries = (
+  summaries: SampleSummary[]
+): SampleSummary[] => {
+  const byKey = new Map<string, SampleSummary>();
+  for (const summary of summaries) {
+    byKey.set(JSON.stringify([summary.id, summary.epoch]), summary);
+  }
+  return Array.from(byKey.values());
+};
+
+/**
+ * Journaled config updates (`_journal/config_updates/{n}.json`) in write
+ * order — the recorder names entries by a monotonic integer index, so
+ * non-integer names are ignored rather than poisoning the sort with NaN.
+ *
+ * Exported for unit testing; `openRemoteLogFile` binds it to its zip.
+ */
+export const readJournalConfigUpdatesFrom = async (
+  entryNames: Iterable<string>,
+  readEntry: (name: string) => Promise<unknown>
+): Promise<ConfigUpdate[]> => {
+  const prefix = "_journal/config_updates/";
+  const entries = Array.from(entryNames)
+    .filter((name) => name.startsWith(prefix) && name.endsWith(".json"))
+    .map((name) => ({ name, index: parseInt(name.slice(prefix.length), 10) }))
+    .filter(({ index }) => Number.isFinite(index))
+    .sort((a, b) => a.index - b.index);
+
+  const updates: ConfigUpdate[] = [];
+  for (const entry of entries) {
+    try {
+      updates.push((await readEntry(entry.name)) as ConfigUpdate);
+    } catch (error) {
+      // The fold is last-wins in order: splicing around a failed middle
+      // read would silently misreport later state, while a truncated tail
+      // cannot — stop at the first failure.
+      console.error(`Failed to read config update ${entry.name}:`, error);
+      break;
+    }
+  }
+  return updates;
+};
 
 /**
  * Opens a remote log file and provides methods to read its contents.
@@ -186,11 +245,13 @@ export const openRemoteLogFile = async (
         throw error;
       } else if (error instanceof Error) {
         throw new Error(
-          `Failed to read or parse file ${file}: ${error.message}`
+          `Failed to read or parse file ${file}: ${error.message}`,
+          { cause: error }
         );
       } else {
         throw new Error(
-          `Failed to read or parse file ${file} - an unknown error occurred`
+          `Failed to read or parse file ${file} - an unknown error occurred`,
+          { cause: error }
         );
       }
     }
@@ -265,9 +326,20 @@ export const openRemoteLogFile = async (
       // written yet — the recorder only flushes it at end-of-eval.
       // Fall back to start.json and synthesize a header from it.
       const start = (await readJSONFile("_journal/start.json")) as LogStart;
-      return headerFromLogStart(start);
+      const header = headerFromLogStart(start);
+      // Mid-run retunes are journaled immediately (one file per update,
+      // consolidated into header.json only at end-of-eval) — fold them in
+      // so running and crashed logs surface config_updates too.
+      const config_updates = await readJournalConfigUpdates();
+      return config_updates.length > 0 ? { ...header, config_updates } : header;
     }
   };
+
+  const readJournalConfigUpdates = (): Promise<ConfigUpdate[]> =>
+    readJournalConfigUpdatesFrom(
+      remoteZipFile.centralDirectory.keys(),
+      (name) => readJSONFile(name)
+    );
 
   const readEvalBasicInfo = async (): Promise<LogPreview> => {
     const header = await readHeader();
@@ -278,24 +350,28 @@ export const openRemoteLogFile = async (
    * Reads individual summary files when summaries.json is not available.
    */
   const readFallbackSummaries = async (): Promise<SampleSummary[]> => {
-    const summaryFiles = Array.from(
-      remoteZipFile.centralDirectory.keys()
-    ).filter(
-      (filename) =>
-        filename.startsWith("_journal/summaries/") && filename.endsWith(".json")
-    );
+    // sorted numerically so the merge below is deterministic: reads complete
+    // out of order, and dedupe needs the later journal file's rows to win
+    const summaryFiles = Array.from(remoteZipFile.centralDirectory.keys())
+      .filter(
+        (filename) =>
+          filename.startsWith(JOURNAL_SUMMARIES_DIR) &&
+          filename.endsWith(".json")
+      )
+      .sort((a, b) => journalFileIndex(a) - journalFileIndex(b));
 
-    const summaries: SampleSummary[] = [];
+    const perFile: SampleSummary[][] = [];
     const errors: unknown[] = [];
 
     await Promise.all(
-      summaryFiles.map((filename) =>
+      summaryFiles.map((filename, index) =>
         queue.enqueue(async () => {
           try {
-            const partialSummary = (await readJSONFile(
-              filename
-            )) as SampleSummary[];
-            summaries.push(...partialSummary);
+            const parsed = await readJSONFile(filename);
+            if (!Array.isArray(parsed)) {
+              throw new Error(`Expected an array in ${filename}`);
+            }
+            perFile[index] = parsed as SampleSummary[];
           } catch (error) {
             errors.push(error);
           }
@@ -310,7 +386,8 @@ export const openRemoteLogFile = async (
       );
     }
 
-    return summaries;
+    // flat() skips the holes failed reads leave behind
+    return dedupeSummaries(perFile.flat());
   };
 
   /**
@@ -318,7 +395,12 @@ export const openRemoteLogFile = async (
    */
   const readSampleSummaries = async (): Promise<SampleSummary[]> => {
     if (remoteZipFile.centralDirectory.has("summaries.json")) {
-      return (await readJSONFile("summaries.json")) as SampleSummary[];
+      // deduped defensively, like the Python reader: a log finalized before
+      // the recorder superseded re-logged samples in its flush buffer can
+      // carry both a requeued sample's rows
+      return dedupeSummaries(
+        (await readJSONFile("summaries.json")) as SampleSummary[]
+      );
     } else {
       return readFallbackSummaries();
     }
@@ -341,6 +423,7 @@ export const openRemoteLogFile = async (
         tags: header.tags,
         metadata: header.metadata,
         log_updates: header.log_updates,
+        config_updates: header.config_updates,
         sampleSummaries,
         etag: initialEtag,
       };
@@ -350,6 +433,8 @@ export const openRemoteLogFile = async (
     zipAccess: () => ({
       entryNames: new Set(remoteZipFile.centralDirectory.keys()),
       readFile: (name: string) => remoteZipFile.readFile(name),
+      uncompressedSize: (name: string) =>
+        remoteZipFile.centralDirectory.get(name)?.uncompressedSize,
     }),
     /**
      * Reads the complete log file.
