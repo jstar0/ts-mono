@@ -46,6 +46,7 @@ import {
 } from "./useActiveTimeline";
 import {
   useTimeline,
+  type SelectOptions,
   type TimelineOptions,
   type TimelineState,
   type UseTimelineProps,
@@ -83,8 +84,8 @@ export interface MultiTimelineNav {
   timelines: Timeline[];
   /** Index of the currently active timeline. */
   activeIndex: number;
-  /** Switch the active timeline by index. Resets selection. */
-  setActive: (index: number) => void;
+  /** Switch the active timeline by index, optionally preserving a deep link. */
+  setActive: (index: number, options?: SelectOptions) => void;
 }
 
 export interface TimelineViewStack {
@@ -177,9 +178,13 @@ export function useTranscriptTimeline(
   const onSelectTimeline = timelineProps?.onSelect;
 
   const setActiveTimeline = useCallback(
-    (index: number) => {
+    (index: number, options?: SelectOptions) => {
       if (index < 0 || index >= timelines.length) return;
-      onSelectTimeline?.(null);
+      if (options) {
+        onSelectTimeline?.(null, options);
+      } else {
+        onSelectTimeline?.(null);
+      }
       setActiveTimelineIndex(index);
     },
     [onSelectTimeline, setActiveTimelineIndex, timelines.length]
