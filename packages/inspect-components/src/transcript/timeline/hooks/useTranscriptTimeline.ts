@@ -180,6 +180,7 @@ export function useTranscriptTimeline(
   const setActiveTimeline = useCallback(
     (index: number, options?: SelectOptions) => {
       if (index < 0 || index >= timelines.length) return;
+      if (index === activeTimelineIndex) return;
       if (options) {
         onSelectTimeline?.(null, options);
       } else {
@@ -187,7 +188,12 @@ export function useTranscriptTimeline(
       }
       setActiveTimelineIndex(index);
     },
-    [onSelectTimeline, setActiveTimelineIndex, timelines.length]
+    [
+      activeTimelineIndex,
+      onSelectTimeline,
+      setActiveTimelineIndex,
+      timelines.length,
+    ]
   );
 
   // timelines is always non-empty here (built from events or serverTimelines),
