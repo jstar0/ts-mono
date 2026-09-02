@@ -62,6 +62,7 @@ const MarkdownDivComponent = forwardRef<HTMLDivElement, MarkdownDivProps>(
       return sanitizeMarkdown(markdown);
     });
 
+    // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
     useEffect(() => {
       // If already cached, apply post-processing and use cached content
       if (cachedHtml) {
@@ -164,10 +165,12 @@ export class MarkdownRenderQueue {
 
         try {
           const result = await task();
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (!cancelled) {
             resolve(result);
           }
         } catch (error) {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (!cancelled) {
             reject(error instanceof Error ? error : new Error(String(error)));
           }

@@ -28,6 +28,13 @@ const shouldSubmitOnEnter = (
   return target.matches(TEXT_INPUT_SELECTOR);
 };
 
+const OVERFLOW_CLASS: Record<NonNullable<ModalProps["overflow"]>, string> = {
+  auto: styles.overflowAuto,
+  hidden: styles.overflowHidden,
+  scroll: styles.overflowScroll,
+  visible: styles.overflowVisible,
+};
+
 interface ModalProps {
   show: boolean;
   onHide: () => void;
@@ -67,6 +74,7 @@ export const Modal: FC<ModalProps> = ({
   const fallbackTitleId = useId();
 
   // Handle escape, enter, and tab (focus trap) keys.
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!show) return;
@@ -99,9 +107,13 @@ export const Modal: FC<ModalProps> = ({
 
   // Move focus into the dialog on open and restore it to the previously
   // focused element on close.
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     if (!show || !modalRef.current) return;
-    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     const modal = modalRef.current;
     // Small delay to ensure web components are ready before focusing.
     const timer = window.setTimeout(() => {
@@ -117,6 +129,7 @@ export const Modal: FC<ModalProps> = ({
     }, 0);
     return () => {
       window.clearTimeout(timer);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional: activeElement cast hides null/non-HTMLElement; .focus may be absent
       previouslyFocused?.focus?.();
     };
   }, [show]);
@@ -162,9 +175,7 @@ export const Modal: FC<ModalProps> = ({
         <div
           className={clsx(
             styles.body,
-            styles[
-              `overflow${overflow.charAt(0).toUpperCase()}${overflow.slice(1)}`
-            ],
+            OVERFLOW_CLASS[overflow],
             !padded && styles.noPadding,
             bodyClassName
           )}

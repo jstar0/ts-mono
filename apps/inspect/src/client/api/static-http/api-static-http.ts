@@ -3,9 +3,8 @@ import {
   EvalSet,
   LogFilesResponse,
 } from "@tsmono/inspect-common/types";
-import { fetchRange } from "@tsmono/util";
+import { fetchRange, isUri } from "@tsmono/util";
 
-import { isUri } from "../../../utils/uri";
 import { fetchSize } from "../../remote/remoteZipFile";
 import { download_file } from "../shared/api-shared";
 import { Capabilities, LogPreview, LogRoot, LogViewAPI } from "../types";
@@ -182,6 +181,7 @@ function staticHttpApiForLog(logInfo: {
     },
     get_log_summary: async (log_file: string) => {
       const manifest = await getManifest();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (manifest) {
         const manifestAbs: Record<string, LogPreview> = {};
         Object.entries(manifest).forEach(([key, preview]) => {
@@ -200,6 +200,7 @@ function staticHttpApiForLog(logInfo: {
       }
 
       const manifest = await getManifest();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (manifest) {
         const keys = Object.keys(manifest);
         const result: LogPreview[] = [];

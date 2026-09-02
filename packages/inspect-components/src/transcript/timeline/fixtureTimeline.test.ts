@@ -18,9 +18,11 @@ import { join } from "path";
 
 import { describe, expect, it } from "vitest";
 
-import type { Event } from "@tsmono/inspect-common/types";
+import type { CompactionEvent, Event } from "@tsmono/inspect-common/types";
 
 import {
+  asTimelineEvent,
+  asTimelineSpan,
   buildTimeline,
   TimelineEvent,
   TimelineSpan,
@@ -144,11 +146,21 @@ const FIXTURE_DIR_CANDIDATES = [
 
 const FIXTURE_DIRS = FIXTURE_DIR_CANDIDATES.filter((dir) => existsSync(dir));
 
+const kCompactionTypes: readonly CompactionEvent["type"][] = [
+  "summary",
+  "edit",
+  "trim",
+];
+
+const compactionType = (value: unknown): CompactionEvent["type"] =>
+  kCompactionTypes.find((type) => type === value) ?? "summary";
+
 function loadFixture(name: string): FixtureData {
   for (const dir of FIXTURE_DIRS) {
     const filePath = join(dir, `${name}.json`);
     if (existsSync(filePath)) {
       const content = readFileSync(filePath, "utf-8");
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- the fixture files on disk are the contract this suite is written against
       return JSON.parse(content) as FixtureData;
     }
   }
@@ -197,7 +209,7 @@ function createEvent(data: JsonEvent): Event | null {
         }
         return mapped;
       });
-      return {
+      const modelFields = {
         ...baseFields,
         event: "model",
         model: data.model ?? "unknown",
@@ -225,33 +237,30 @@ function createEvent(data: JsonEvent): Event | null {
                 : null,
             }
           : null,
-      } as Event;
+      };
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- same boundary as loadFixture: the fixture JSON on disk is the shape this suite is written against
+      return modelFields as Event;
     }
 
     case "tool": {
       const nestedEvents = data.events
         ?.map((e) => createEvent(e))
         .filter((e): e is Event => e !== null);
-      const toolEvent: Record<string, unknown> = {
+      return {
         ...baseFields,
         event: "tool",
         id: data.id ?? "",
         function: data.function ?? "",
+        arguments: {},
+        type: "function",
         completed: data.completed ?? null,
         span_id: data.span_id ?? null,
         agent: data.agent ?? null,
         events: nestedEvents ?? [],
+        result: data.result ?? "",
+        agent_span_id: data.agent_span_id ?? null,
+        message_id: data.message_id ?? null,
       };
-      if (data.result !== undefined) {
-        toolEvent.result = data.result;
-      }
-      if (data.agent_span_id !== undefined) {
-        toolEvent.agent_span_id = data.agent_span_id;
-      }
-      if (data.message_id !== undefined) {
-        toolEvent.message_id = data.message_id;
-      }
-      return toolEvent as Event;
     }
 
     case "info": {
@@ -289,7 +298,7 @@ function createEvent(data: JsonEvent): Event | null {
       return {
         ...baseFields,
         event: "compaction",
-        type: (data.type as "summary" | "edit" | "trim") ?? "summary",
+        type: compactionType(data.type),
         span_id: data.span_id ?? null,
         source: null,
         tokens_before: null,
@@ -394,10 +403,8 @@ function assertScoringSpanMatches(
   expect(scorerSpans.length).toBe(1);
   const scoring = scorerSpans[0]!;
 
-  if (expected.event_uuids !== undefined) {
-    const actualUuids = getDirectEventUuids(scoring);
-    expect(actualUuids).toEqual(expected.event_uuids);
-  }
+  const actualUuids = getDirectEventUuids(scoring);
+  expect(actualUuids).toEqual(expected.event_uuids);
 }
 
 function assertSpanMatches(
@@ -412,10 +419,7 @@ function assertSpanMatches(
   expect(actual!.id).toBe(expected.id);
   expect(actual!.name).toBe(expected.name);
 
-  if (
-    expected.source &&
-    (expected.source.source === "span" || expected.source.source === "tool")
-  ) {
+  if (expected.source) {
     expect(actual!.spanType).toBe("agent");
   }
 
@@ -480,13 +484,11 @@ function assertSpanMatches(
       expect(actualItem.type).toBe(expectedType);
 
       if (expectedItem.type === "event" && expectedItem.uuid) {
-        expect((actualItem as TimelineEvent).event.uuid).toBe(
-          expectedItem.uuid
-        );
+        expect(asTimelineEvent(actualItem).event.uuid).toBe(expectedItem.uuid);
       }
 
       if (expectedItem.type === "agent") {
-        const spanItem = actualItem as TimelineSpan;
+        const spanItem = asTimelineSpan(actualItem);
         if (expectedItem.id) {
           expect(spanItem.id).toBe(expectedItem.id);
         }
@@ -494,12 +496,7 @@ function assertSpanMatches(
           expect(spanItem.name).toBe(expectedItem.name);
         }
         if (expectedItem.source) {
-          if (
-            expectedItem.source.source === "span" ||
-            expectedItem.source.source === "tool"
-          ) {
-            expect(spanItem.spanType).toBe("agent");
-          }
+          expect(spanItem.spanType).toBe("agent");
         }
         if (expectedItem.nested_uuids) {
           const allUuids = getAllEventUuids(spanItem);
@@ -608,13 +605,13 @@ function assertTimelineMatches(
         expect(actualItem.type).toBe(expectedType);
 
         if (expectedItem.type === "event" && expectedItem.uuid) {
-          expect((actualItem as TimelineEvent).event.uuid).toBe(
+          expect(asTimelineEvent(actualItem).event.uuid).toBe(
             expectedItem.uuid
           );
         }
 
         if (expectedItem.type === "agent") {
-          const spanItem = actualItem as TimelineSpan;
+          const spanItem = asTimelineSpan(actualItem);
           if (expectedItem.id) {
             expect(spanItem.id).toBe(expectedItem.id);
           }
@@ -622,12 +619,7 @@ function assertTimelineMatches(
             expect(spanItem.name).toBe(expectedItem.name);
           }
           if (expectedItem.source) {
-            if (
-              expectedItem.source.source === "span" ||
-              expectedItem.source.source === "tool"
-            ) {
-              expect(spanItem.spanType).toBe("agent");
-            }
+            expect(spanItem.spanType).toBe("agent");
           }
           if (expectedItem.nested_uuids) {
             const allUuids = getAllEventUuids(spanItem);

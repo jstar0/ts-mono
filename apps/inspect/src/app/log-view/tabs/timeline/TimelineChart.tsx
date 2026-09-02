@@ -103,11 +103,9 @@ const sameSample = (a: SampleSummary, b: SampleSummary): boolean =>
   a.id === b.id && a.epoch === b.epoch;
 
 const sampleTokens = (sample: SampleSummary): number | undefined => {
-  const usage = sample.model_usage;
-  if (!usage) return undefined;
   let total = 0;
-  for (const u of Object.values(usage)) {
-    total += u.total_tokens ?? 0;
+  for (const u of Object.values(sample.model_usage)) {
+    total += u.total_tokens;
   }
   return total > 0 ? total : undefined;
 };
@@ -203,19 +201,15 @@ export const TimelineChart: FC<TimelineChartProps> = ({
   // Callback ref, not useResizeObserver — the chart renders null until
   // samples arrive (and while every band is toggled off), so a mount-only
   // effect observes nothing and the width would stay 0 forever.
-  const resizeObserver = useRef<ResizeObserver | null>(null);
   const chartRef = useCallback((element: HTMLDivElement | null) => {
-    resizeObserver.current?.disconnect();
-    resizeObserver.current = null;
-    if (element) {
-      const observer = new ResizeObserver((entries) => {
-        if (entries[0]) {
-          setWidth(entries[0].contentRect.width);
-        }
-      });
-      observer.observe(element);
-      resizeObserver.current = observer;
-    }
+    if (!element) return;
+    const observer = new ResizeObserver((entries) => {
+      if (entries[0]) {
+        setWidth(entries[0].contentRect.width);
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [lineHover, setLineHover] = useState<LineHover | null>(null);
@@ -250,6 +244,7 @@ export const TimelineChart: FC<TimelineChartProps> = ({
     }
     popoverCloseTimer.current = window.setTimeout(() => setPopover(null), 250);
   };
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(
     () => () => {
       if (popoverCloseTimer.current !== null) {
@@ -1282,7 +1277,8 @@ export const TimelineChart: FC<TimelineChartProps> = ({
 interface ScoreRow {
   key: string;
   name: string;
-  value: ScoreValue | undefined;
+  // null: dict-valued scores admit null entries (see scoreValue).
+  value: ScoreValue | null | undefined;
   scoreType: string;
 }
 
@@ -1299,14 +1295,15 @@ const scoreRowsFor = (
         key: `${label.scorer}.${label.name}`,
         name: label.name,
         value: evalDescriptor.score(sample, label)?.value,
-        scoreType: evalDescriptor.scoreDescriptor(label).scoreType,
+        scoreType:
+          evalDescriptor.scoreDescriptor(label)?.scoreType ?? kScoreTypeOther,
       }))
       .filter((row) => row.value !== undefined && row.value !== null);
   }
   return Object.entries(sample.scores).map(([name, score]) => ({
     key: name,
     name,
-    value: formatShort(score?.value),
+    value: formatShort(score.value),
     scoreType: kScoreTypeOther,
   }));
 };

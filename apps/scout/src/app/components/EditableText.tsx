@@ -72,6 +72,7 @@ export const EditableText: FC<EditableTextProps> = ({
   }, [mru, mruMaxItems, currentText, isEditing]);
 
   // Update showMruPopover based on whether we have filtered items and focus state
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     // TODO: derive during render instead of mirroring into state via effect
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -98,7 +99,7 @@ export const EditableText: FC<EditableTextProps> = ({
 
   const commitChanges = useCallback(() => {
     if (spanRef.current) {
-      const newValue = spanRef.current.textContent?.trim() || "";
+      const newValue = spanRef.current.textContent.trim() || "";
       if (newValue !== "" && newValue !== initialValueRef.current) {
         onValueChanged(newValue);
       } else if (newValue === "") {
@@ -208,7 +209,7 @@ export const EditableText: FC<EditableTextProps> = ({
       <div ref={containerRef} className={clsx(styles.container, className)}>
         <div className={clsx(styles.labelContainer)} title={title}>
           {icon && <i className={`${icon} ${styles.icon}`} />}
-          {label && <span className={styles.label}>{label}</span>}
+          {label}
         </div>
         <span
           ref={spanRef}

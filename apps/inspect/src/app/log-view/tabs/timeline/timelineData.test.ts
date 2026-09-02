@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import { testEvalStats } from "@tsmono/inspect-common/testing";
 import {
   ConfigUpdate,
   ConnectionLimitChange,
-  EvalStats,
   LogUpdate,
 } from "@tsmono/inspect-common/types";
 
+import { testSampleSummary } from "../../../../client/api/testClientApi";
 import { SampleSummary } from "../../../../client/api/types";
 
 import {
@@ -26,14 +27,8 @@ import {
 
 const epoch = (iso: string): number => Date.parse(iso) / 1000;
 
-const sample = (overrides: Partial<SampleSummary>): SampleSummary => ({
-  id: 1,
-  epoch: 1,
-  input: "input",
-  target: "target",
-  scores: null,
-  ...overrides,
-});
+const sample = (overrides: Partial<SampleSummary>): SampleSummary =>
+  testSampleSummary({ id: 1, target: "target", ...overrides });
 
 describe("sampleStatus", () => {
   it("separates cancellations and still-running samples from errors", () => {
@@ -81,7 +76,7 @@ describe("densestTerminationBin", () => {
 
 describe("rowCategory", () => {
   const base = { time: 0, postRun: false };
-  const configUpdate = {
+  const configUpdate: ConfigUpdate = {
     scope: "task",
     changes: [
       {
@@ -98,7 +93,7 @@ describe("rowCategory", () => {
       reason: "raising concurrency",
       metadata: {},
     },
-  } as ConfigUpdate;
+  };
 
   it("splits the old Runtime junk drawer into limits, errors, and run", () => {
     expect(
@@ -148,12 +143,11 @@ describe("rowCategory", () => {
 });
 
 describe("withConfigOrdinals", () => {
-  const configUpdate = (timestamp: string): ConfigUpdate =>
-    ({
-      scope: "task",
-      changes: [],
-      provenance: { timestamp, author: "a", metadata: {} },
-    }) as unknown as ConfigUpdate;
+  const configUpdate = (timestamp: string): ConfigUpdate => ({
+    scope: "task",
+    changes: [],
+    provenance: { timestamp, author: "a", metadata: {} },
+  });
 
   it("numbers config markers chronologically, skipping tag edits", () => {
     const config = configMarkers(
@@ -194,7 +188,7 @@ describe("configMarkers", () => {
     // Journal entries are cast, not validated — a malformed `changes` must
     // degrade to a skip (matching effectiveConfig) in both the markers and
     // the History rows.
-    const good = {
+    const good: ConfigUpdate = {
       scope: "task",
       changes: [
         {
@@ -210,7 +204,8 @@ describe("configMarkers", () => {
         author: "a",
         metadata: {},
       },
-    } as ConfigUpdate;
+    };
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- deliberately out of contract: the point of the case is a journal entry whose `changes` is not an array
     const malformed = {
       scope: "task",
       changes: "not-an-array",
@@ -229,7 +224,7 @@ describe("configMarkers", () => {
   });
 
   it("classifies inherited process updates as pre-run", () => {
-    const inherited = {
+    const inherited: ConfigUpdate = {
       scope: "process",
       changes: [
         {
@@ -245,7 +240,7 @@ describe("configMarkers", () => {
         author: "a",
         metadata: { inherited: true },
       },
-    } as ConfigUpdate;
+    };
     const markers = configMarkers([inherited]);
     expect(markers[0]?.preRun).toBe(true);
   });
@@ -262,6 +257,7 @@ describe("logMarkers", () => {
         metadata: {},
       },
     };
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- deliberately out of contract: the point of the case is an edit record whose `edits` is not an array
     const malformed = {
       edits: "not-an-array",
       provenance: {
@@ -295,10 +291,10 @@ describe("fmtDuration", () => {
 
 describe("historyRows", () => {
   it("sorts run lifecycle rows around timestamp ties", () => {
-    const stats = {
+    const stats = testEvalStats({
       started_at: "2026-07-20T18:25:24+00:00",
       completed_at: "2026-07-20T18:27:16+00:00",
-    } as EvalStats;
+    });
     const rows = historyRows({
       status: "success",
       stats,
@@ -327,11 +323,11 @@ describe("historyRows", () => {
   });
 
   it("sorts an inherited pre-run update before run start at its real time", () => {
-    const stats = {
+    const stats = testEvalStats({
       started_at: "2026-07-20T18:25:24+00:00",
       completed_at: "2026-07-20T18:27:16+00:00",
-    } as EvalStats;
-    const inherited = {
+    });
+    const inherited: ConfigUpdate = {
       scope: "process",
       changes: [
         {
@@ -348,7 +344,7 @@ describe("historyRows", () => {
         author: "a",
         metadata: { inherited: true },
       },
-    } as ConfigUpdate;
+    };
     const rows = historyRows({
       status: "success",
       stats,
@@ -378,7 +374,7 @@ describe("historyRows", () => {
       timestamp,
     });
     const t = epoch("2026-07-20T18:26:00+00:00");
-    const stats = {
+    const stats = testEvalStats({
       started_at: "2026-07-20T18:25:24+00:00",
       completed_at: "2026-07-20T18:27:16+00:00",
       connection_limit_history: [
@@ -390,7 +386,7 @@ describe("historyRows", () => {
         change("m1", "steady_state_up", 10, 12, t + 4),
         change("m1", "steady_state_up", 12, 14, t + 5),
       ],
-    } as EvalStats;
+    });
     const rows = historyRows({ status: "success", stats, samples: [] }).filter(
       (row) => row.kind === "connections"
     );
@@ -440,7 +436,7 @@ describe("historyRows", () => {
 
   it("sorts a config ◆ before its manual controller echo at the same time", () => {
     const when = "2026-07-20T18:26:00+00:00";
-    const stats = {
+    const stats = testEvalStats({
       started_at: "2026-07-20T18:25:24+00:00",
       completed_at: "2026-07-20T18:27:16+00:00",
       connection_limit_history: [
@@ -452,12 +448,12 @@ describe("historyRows", () => {
           timestamp: epoch(when),
         },
       ],
-    } as EvalStats;
-    const configUpdate = {
-      scope: "eval",
+    });
+    const configUpdate: ConfigUpdate = {
+      scope: "task",
       changes: [],
-      provenance: { timestamp: when, author: "cteague" },
-    } as unknown as ConfigUpdate;
+      provenance: { timestamp: when, author: "cteague", metadata: {} },
+    };
     const rows = historyRows({
       status: "success",
       stats,
@@ -473,10 +469,10 @@ describe("historyRows", () => {
   });
 
   it("keeps runEnd last when clock skew stamps a sample past run end", () => {
-    const stats = {
+    const stats = testEvalStats({
       started_at: "2026-07-20T18:25:24+00:00",
       completed_at: "2026-07-20T18:27:16+00:00",
-    } as EvalStats;
+    });
     const rows = historyRows({
       status: "success",
       stats,

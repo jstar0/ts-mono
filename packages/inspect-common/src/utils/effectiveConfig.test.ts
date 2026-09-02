@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { normalizeConfigUpdates } from "../normalize";
 import type { ConfigUpdate, EvalConfig, GenerateConfig } from "../types";
 
 import {
@@ -23,6 +24,11 @@ const update = (
   },
   ...overrides,
 });
+
+/** Deliberately schema-invalid updates for the runtime-guard tests below. */
+const malformedUpdates = (updates: unknown[]): ConfigUpdate[] =>
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- deliberately out of contract: these cases exist to prove the fold survives journal entries no valid ConfigUpdate could be
+  updates as ConfigUpdate[];
 
 describe("effectiveEvalConfig", () => {
   it("returns the launch config unchanged when there are no updates", () => {
@@ -193,7 +199,7 @@ describe("effectiveEvalConfig", () => {
 
   it("skips updates whose changes is missing or not an array", () => {
     const launch: EvalConfig = { max_samples: 5 };
-    const malformed = [
+    const malformed = malformedUpdates([
       update([]),
       { ...update([]), changes: undefined },
       { ...update([]), changes: { config: "eval" } },
@@ -206,7 +212,7 @@ describe("effectiveEvalConfig", () => {
           cleared: false,
         },
       ]),
-    ] as unknown as ConfigUpdate[];
+    ]);
     expect(effectiveEvalConfig(launch, malformed).max_samples).toBe(10);
     expect(evalConfigChanges(malformed).get("max_samples")?.value).toBe(10);
     expect(concurrencyChanges(malformed)).toEqual([]);
@@ -214,7 +220,7 @@ describe("effectiveEvalConfig", () => {
 
   it("skips non-object elements inside changes", () => {
     const launch: EvalConfig = { max_samples: 5 };
-    const corrupt = [
+    const corrupt = malformedUpdates([
       {
         ...update([]),
         changes: [
@@ -230,14 +236,17 @@ describe("effectiveEvalConfig", () => {
           },
         ],
       },
-    ] as unknown as ConfigUpdate[];
+    ]);
     expect(effectiveEvalConfig(launch, corrupt).max_samples).toBe(10);
     expect(evalConfigChanges(corrupt).get("max_samples")?.value).toBe(10);
     expect(concurrencyChanges(corrupt)).toEqual([]);
   });
 
-  it("tolerates a missing provenance", () => {
-    const bare = [
+  it("tolerates a missing provenance once boundary-normalized", () => {
+    // A crafted log omitting provenance is repaired at the parse boundary
+    // (normalizeConfigUpdates fills it); the fold itself may then read
+    // provenance unguarded.
+    const bare = normalizeConfigUpdates([
       {
         ...update([
           {
@@ -257,7 +266,7 @@ describe("effectiveEvalConfig", () => {
         ]),
         provenance: undefined,
       },
-    ] as unknown as ConfigUpdate[];
+    ]);
     expect(evalConfigChanges(bare).get("max_samples")?.inherited).toBe(false);
     expect(concurrencyChanges(bare)[0]?.inherited).toBe(false);
   });

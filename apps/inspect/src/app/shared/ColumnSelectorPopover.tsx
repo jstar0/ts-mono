@@ -10,6 +10,9 @@ import styles from "./ColumnSelectorPopover.module.css";
 
 export type ColumnScoresViewMode = "by-metric" | "per-scorer";
 
+const isColumnScoresViewMode = (value: string): value is ColumnScoresViewMode =>
+  value === "by-metric" || value === "per-scorer";
+
 interface ColumnSelectorPopoverProps {
   showing: boolean;
   setShowing: (showing: boolean) => void;
@@ -164,7 +167,6 @@ export const ColumnSelectorPopover: FC<ColumnSelectorPopoverProps> = ({
       hoverDelay={-1}
       closeOnMouseLeave={false}
       offset={[0, 1]}
-      className={styles.popover}
     >
       <div className={clsx(styles.scrollableContainer, "text-size-small")}>
         <div className={clsx(styles.section)}>
@@ -220,7 +222,7 @@ export const ColumnSelectorPopover: FC<ColumnSelectorPopoverProps> = ({
                       ]}
                       selectedId={scoresViewMode}
                       onSegmentChange={(id) =>
-                        onScoresViewModeChange(id as ColumnScoresViewMode)
+                        isColumnScoresViewMode(id) && onScoresViewModeChange(id)
                       }
                     />
                   </div>

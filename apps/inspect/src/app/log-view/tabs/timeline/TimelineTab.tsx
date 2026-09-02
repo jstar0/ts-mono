@@ -247,13 +247,13 @@ const TimelineTabBody: FC<TimelineTabProps> = ({
     () =>
       window
         ? guideSegments(
-            evalSpec?.config?.max_samples,
+            evalSpec?.config.max_samples,
             "max_samples",
             markers,
             window
           )
         : [],
-    [evalSpec?.config?.max_samples, markers, window]
+    [evalSpec?.config.max_samples, markers, window]
   );
 
   // ── band picker (state keyed per log) ────────────────────────────────
@@ -362,6 +362,7 @@ const TimelineTabBody: FC<TimelineTabProps> = ({
   const timeDescending = timeSort
     ? timeSort === "desc"
     : evalStatus === "started";
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     if (timeSort === undefined) {
       setTimeSort(evalStatus === "started" ? "desc" : "asc");

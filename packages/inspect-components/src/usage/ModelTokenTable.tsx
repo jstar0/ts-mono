@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { FC, Fragment } from "react";
 
 import { formatConfigValue } from "@tsmono/inspect-common/utils";
-import { formatNumber } from "@tsmono/util";
+import { formatCurrency, formatNumber } from "@tsmono/util";
 
 import styles from "./ModelTokenTable.module.css";
 import { ModelUsageData } from "./ModelUsagePanel";
@@ -38,11 +38,11 @@ const CAT_LABEL: Record<CategoryKey, string> = {
 };
 
 const CAT_SWATCH: Record<CategoryKey, string> = {
-  input: styles.catInput!,
-  cacheRead: styles.catCacheRead!,
-  cacheWrite: styles.catCacheWrite!,
-  output: styles.catOutput!,
-  reasoning: styles.catReasoning!,
+  input: styles.catInput,
+  cacheRead: styles.catCacheRead,
+  cacheWrite: styles.catCacheWrite,
+  output: styles.catOutput,
+  reasoning: styles.catReasoning,
 };
 
 const categoryValue = (usage: ModelUsageData, key: CategoryKey): number => {
@@ -128,6 +128,11 @@ export const ModelTokenTable: FC<ModelTokenTableProps> = ({
                       <span className={styles.modelTotal}>
                         {formatNumber(total)}
                         <small>tokens</small>
+                      </span>
+                    )}
+                    {showTokenColumns && usage?.total_cost != null && (
+                      <span className={styles.modelCost}>
+                        {formatCurrency(usage.total_cost)}
                       </span>
                     )}
                     {(() => {
@@ -230,6 +235,16 @@ export const ModelTokenTable: FC<ModelTokenTableProps> = ({
                     <td className={clsx(styles.num, styles.perSampleCell)}>
                       {formatNumber(Math.round(total / samples))}
                       <span className={styles.perSampleSub}>avg / sample</span>
+                      {usage.total_cost != null && (
+                        <>
+                          <span className={styles.perSampleCost}>
+                            {formatCurrency(usage.total_cost / samples)}
+                          </span>
+                          <span className={styles.perSampleSub}>
+                            avg cost / sample
+                          </span>
+                        </>
+                      )}
                     </td>
                   )}
                 </tr>

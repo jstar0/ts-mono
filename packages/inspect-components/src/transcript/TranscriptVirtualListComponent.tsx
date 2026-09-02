@@ -96,6 +96,7 @@ export const TranscriptVirtualListComponent: FC<
   // event lists. VirtualList handles short lists fine.
   const useVirtualization = !disableVirtualization;
 
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     onNativeFindChanged?.(!useVirtualization);
   }, [onNativeFindChanged, useVirtualization]);
@@ -122,6 +123,7 @@ export const TranscriptVirtualListComponent: FC<
 
   // Non-virtual scroll-into-view for initial event
   const nonVirtualGridRef = useRef<HTMLDivElement | null>(null);
+  // eslint-disable-next-line tsmono/no-raw-use-effect -- baselined at rule introduction; migrate to a named hook or derived state
   useEffect(() => {
     if (!useVirtualization && initialEventId) {
       const row = nonVirtualGridRef.current?.querySelector(
@@ -164,7 +166,6 @@ export const TranscriptVirtualListComponent: FC<
 
   const renderRow = useCallback(
     (index: number, item: EventNode) => {
-      const paddingClass = index === 0 ? styles.first : undefined;
       const depth = relativeIndent
         ? item.depth - (eventNodes[0]?.depth ?? 0)
         : item.depth;
@@ -216,7 +217,6 @@ export const TranscriptVirtualListComponent: FC<
           key={item.id}
           className={clsx(
             styles.node,
-            paddingClass,
             isLast ? styles.last : undefined,
             attachedClass
           )}
