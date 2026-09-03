@@ -2,10 +2,20 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import {
+  testAssistantMessage,
+  testChatCompletionChoice,
+  testModelEvent,
+  testModelOutput,
+  testModelUsage,
+  testSpanBeginEvent,
+  testSpanEndEvent,
+  testTimelineEvent,
+  testTimelineSpan,
+} from "@tsmono/inspect-common/testing";
 import type {
   Event,
   Timeline as ServerTimeline,
-  TimelineEvent as ServerTimelineEvent,
   TimelineSpan as ServerTimelineSpan,
 } from "@tsmono/inspect-common/types";
 
@@ -19,74 +29,49 @@ function makeModelEvent(
   startSec: number,
   spanId: string | null = null
 ): Event {
-  return {
-    event: "model",
+  return testModelEvent({
     uuid,
-    model: "test-model",
-    input: [],
-    output: {
+    output: testModelOutput({
       choices: [
-        {
-          message: {
-            role: "assistant",
+        testChatCompletionChoice({
+          message: testAssistantMessage({
             content: "response",
             source: "generate",
-          },
-          stop_reason: "stop",
-        },
+          }),
+        }),
       ],
       completion: "response",
-      model: "test-model",
-      usage: {
+      usage: testModelUsage({
         input_tokens: 1,
         output_tokens: 1,
         total_tokens: 2,
-      },
+      }),
       time: 1,
-    },
-    config: {},
-    tools: [],
-    tool_choice: "auto",
+    }),
     timestamp: new Date(1705312800000 + startSec * 1000).toISOString(),
     working_start: startSec,
     working_time: 1,
     span_id: spanId,
-    error: null,
-    traceback_ansi: null,
-  } as unknown as Event;
+  });
 }
 
 function spanBegin(id: string, name: string, type: string): Event {
-  return {
-    event: "span_begin",
+  return testSpanBeginEvent({
     id,
     name,
     type,
     parent_id: null,
-    span_id: null,
     timestamp: new Date(1705312800000).toISOString(),
     working_start: 0,
-    pending: null,
-    uuid: null,
-    metadata: null,
-  } as unknown as Event;
+  });
 }
 
 function spanEnd(id: string): Event {
-  return {
-    event: "span_end",
+  return testSpanEndEvent({
     id,
-    span_id: null,
     timestamp: new Date(1705312805000).toISOString(),
     working_start: 5,
-    pending: null,
-    uuid: null,
-    metadata: null,
-  } as unknown as Event;
-}
-
-function makeServerEvent(uuid: string): ServerTimelineEvent {
-  return { type: "event", event: uuid };
+  });
 }
 
 function makeServerSpan(
@@ -94,20 +79,11 @@ function makeServerSpan(
   name: string,
   events: string[]
 ): ServerTimelineSpan {
-  return {
-    type: "span",
+  return testTimelineSpan({
     id,
     name,
-    span_type: null,
-    content: events.map(makeServerEvent),
-    branches: [],
-    branched_from: null,
-    description: null,
-    utility: false,
-    tool_invoked: false,
-    agent_result: null,
-    outline: null,
-  };
+    content: events.map((event) => testTimelineEvent({ event })),
+  });
 }
 
 function makeServerTimeline(name: string, events: string[]): ServerTimeline {

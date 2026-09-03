@@ -231,10 +231,10 @@ describe("useTranscriptTimeline", () => {
     const secondTimeline: ServerTimeline = {
       name: "second",
       description: "Second timeline",
-      root: makeServerSpan({
+      root: testTimelineSpan({
         id: "second-root",
         name: "Second transcript",
-        content: [makeServerEvent("evt-2")],
+        content: [testTimelineEvent({ event: "evt-2" })],
       }),
     };
     const { result } = renderHook(() =>
@@ -262,10 +262,10 @@ describe("useTranscriptTimeline", () => {
     const secondTimeline: ServerTimeline = {
       name: "second",
       description: "Second timeline",
-      root: makeServerSpan({
+      root: testTimelineSpan({
         id: "second-root",
         name: "Second transcript",
-        content: [makeServerEvent("evt-2")],
+        content: [testTimelineEvent({ event: "evt-2" })],
       }),
     };
     const { result } = renderHook(() =>
