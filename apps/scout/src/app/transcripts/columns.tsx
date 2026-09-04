@@ -34,6 +34,7 @@ export const COLUMN_LABELS: Record<keyof TranscriptInfo, string> = {
   agent: "Agent",
   agent_args: "Agent Args",
   score: "Score",
+  score_explanation: "Score Explanation",
   metadata: "Metadata",
   source_id: "Source ID",
   source_type: "Source Type",
@@ -60,6 +61,7 @@ export const COLUMN_HEADER_TITLES: Record<keyof TranscriptInfo, string> = {
   agent: "Agent used to to execute task.",
   agent_args: "Arguments passed to create agent.",
   score: "Value indicating score on task.",
+  score_explanation: "Explanation for the score assigned to the task.",
   metadata:
     "Transcript source specific metadata (e.g. model, task name, errors, epoch, dataset sample id, limits, etc.).",
   source_id:
@@ -429,6 +431,21 @@ export const ALL_COLUMNS: Record<keyof TranscriptInfo, TranscriptColumn> = {
       return String(value);
     },
   }),
+  score_explanation: createColumn({
+    accessorKey: "score_explanation",
+    header: "Score Explanation",
+    headerTitle: "Explanation for the score assigned to the task.",
+    size: 240,
+    minSize: 120,
+    maxSize: 500,
+    meta: {
+      filterable: true,
+      filterType: "string",
+    },
+    cell: (value) => {
+      return value || "-";
+    },
+  }),
   metadata: createObjectColumn({
     accessorKey: "metadata",
     header: "Metadata",
@@ -607,6 +624,7 @@ export const DEFAULT_COLUMN_ORDER: Array<keyof TranscriptInfo> = [
   "agent",
   "agent_args",
   "score",
+  "score_explanation",
   "metadata",
   "source_id",
   "source_type",
